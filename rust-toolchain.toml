@@ -1,0 +1,7 @@
+[toolchain]
+# Pinned to 1.91 because rustc 1.92 introduced a coherence-checking change
+# that breaks `cookie 0.18.1` (transitive dep of Tauri 2.x). Track upstream
+# at https://github.com/SergioBenitez/cookie-rs and bump back to stable when
+# a fixed cookie release is published.
+channel = "1.91.0"
+components = ["rustfmt", "clippy"]

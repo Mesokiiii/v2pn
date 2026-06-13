@@ -1,0 +1,41 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / frontend
+node_modules/
+frontend/dist/
+.pnpm-store/
+
+# Tauri
+crates/tauri-app/gen/
+crates/tauri-app/binaries/*
+!crates/tauri-app/binaries/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local
+.env
+.env.local
+*.log
+
+# Vite temp
+**/vite.config.*.timestamp-*.mjs
+
+# Probe / research artifacts (do not commit)
+*.bin
+cookies.txt
+headers.txt
+real-headers.txt
+snippet.txt
+webapp.html
+webapp.js

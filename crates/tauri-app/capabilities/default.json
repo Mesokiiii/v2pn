@@ -1,0 +1,35 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities granted to the main window. Tightly scoped — frontend cannot reach fs/process directly.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-toggle-maximize",
+    "core:event:default",
+    "core:app:default",
+    "core:tray:default",
+    "core:menu:default",
+
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+
+    "notification:default",
+    "os:default",
+
+    "dialog:allow-open",
+    "dialog:allow-save",
+
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "http://**" },
+        { "url": "https://**" }
+      ]
+    }
+  ]
+}

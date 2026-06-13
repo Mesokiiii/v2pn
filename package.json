@@ -1,0 +1,17 @@
+{
+  "name": "v2pn-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "frontend:dev": "pnpm --filter v2pn-frontend dev",
+    "frontend:build": "pnpm --filter v2pn-frontend build",
+    "fmt": "cargo fmt --all"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  },
+  "packageManager": "pnpm@10.15.1"
+}

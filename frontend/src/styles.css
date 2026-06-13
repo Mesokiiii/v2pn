@@ -1,0 +1,495 @@
+@import "tailwindcss";
+
+/* -------------------------------------------------------------------------- */
+/*  v2pn — design tokens (Linear / Supabase / Vercel-flavoured monochrome)    */
+/*                                                                            */
+/*  Tokens live on `:root`. The active theme is selected by the `data-theme`  */
+/*  attribute on the <html> element ("dark" by default, "light" otherwise).   */
+/* -------------------------------------------------------------------------- */
+
+:root,
+:root[data-theme="dark"] {
+  /* Background ladder — almost imperceptible elevation steps. */
+  --color-bg-0: #08090a;       /* app background                        */
+  --color-bg-1: #0c0d0e;       /* surfaces inside main                  */
+  --color-bg-2: #111213;       /* hover / cards                         */
+  --color-bg-3: #161718;       /* popovers / tooltip                    */
+
+  /* Hairline borders — the whole language of this UI. */
+  --color-line:        rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.10);
+
+  /* Text ladder. */
+  --color-fg-0: #f7f8f8;       /* primary copy                          */
+  --color-fg-1: #b4b7bb;       /* secondary copy                        */
+  --color-fg-2: #6b6f76;       /* tertiary / hints                      */
+  --color-fg-3: #4a4d52;       /* disabled / mutest                     */
+
+  /* Tinted overlays for hover states (depend on theme luminance). */
+  --color-tint-1: rgba(255, 255, 255, 0.03);
+  --color-tint-2: rgba(255, 255, 255, 0.05);
+  --color-tint-3: rgba(255, 255, 255, 0.08);
+
+  /* Single accent — Linear-blue / Supabase-green muted hybrid. */
+  --color-accent:    #5e6ad2;
+  --color-accent-fg: #ffffff;
+
+  /* Status. */
+  --color-good: #3ecf8e;
+  --color-warn: #f5a623;
+  --color-bad:  #ef4444;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --color-bg-0: #fcfcfc;
+  --color-bg-1: #f8f8f9;
+  --color-bg-2: #f2f2f3;
+  --color-bg-3: #ebebed;
+
+  --color-line:        rgba(0, 0, 0, 0.07);
+  --color-line-strong: rgba(0, 0, 0, 0.12);
+
+  --color-fg-0: #1f2023;
+  --color-fg-1: #5f6268;
+  --color-fg-2: #8d8f95;
+  --color-fg-3: #bdbdbe;
+
+  --color-tint-1: rgba(0, 0, 0, 0.025);
+  --color-tint-2: rgba(0, 0, 0, 0.04);
+  --color-tint-3: rgba(0, 0, 0, 0.07);
+
+  --color-accent:    #5e6ad2;
+  --color-accent-fg: #ffffff;
+
+  --color-good: #2ea36b;
+  --color-warn: #c97e0e;
+  --color-bad:  #d12b2b;
+
+  color-scheme: light;
+}
+
+@theme {
+  /* Typography. */
+  --font-sans: "Geist Variable", "Inter", "Inter Tight", -apple-system, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Radii — small and consistent. */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+
+  /* Motion — Linear's signature: snappy out, gentle settle. */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast:    120ms;
+  --dur-base:    180ms;
+  --dur-slow:    260ms;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+html, body, #root {
+  height: 100%;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-fg-0);
+  background: var(--color-bg-0);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+/* tighten headings — Linear signature. */
+h1, h2, h3, h4 { letter-spacing: -0.018em; }
+
+/* native draggable region for the custom titlebar */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] input,
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* ---------- utilities ---------------------------------------------------- */
+
+@utility hairline {
+  border: 1px solid var(--color-line);
+}
+@utility hairline-b {
+  border-bottom: 1px solid var(--color-line);
+}
+@utility hairline-r {
+  border-right: 1px solid var(--color-line);
+}
+@utility hairline-t {
+  border-top: 1px solid var(--color-line);
+}
+
+@utility kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-1);
+  background: var(--color-bg-2);
+  color: var(--color-fg-1);
+}
+
+@utility tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-fg-2);
+}
+
+/* ---------- status dot (Linear) ----------------------------------------- */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-fg-3);
+  box-shadow: 0 0 0 0 currentColor;
+  transition: background-color 200ms ease;
+}
+.dot[data-state="connecting"] {
+  background: var(--color-warn);
+  animation: dot-pulse 1.4s ease-in-out infinite;
+  color: var(--color-warn);
+}
+.dot[data-state="connected"] {
+  background: var(--color-good);
+  color: var(--color-good);
+}
+.dot[data-state="error"] {
+  background: var(--color-bad);
+  color: var(--color-bad);
+}
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 50%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%,  transparent); }
+}
+
+/* ---------- focus ring (subtle, accent-tinted) -------------------------- */
+:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--color-accent) 80%, transparent);
+  outline-offset: 1px;
+}
+
+/* ---------- scrollbar (slim, theme-aware) ------------------------------- */
+::-webkit-scrollbar         { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb   { background: var(--color-tint-2); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-tint-3); }
+::-webkit-scrollbar-track   { background: transparent; }
+
+/* ---------- selection --------------------------------------------------- */
+::selection { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+
+/* ---------- enter animations ------------------------------------------- */
+/*  Used when a new subscription is imported. Each row slides up + fades   */
+/*  in with a tiny stagger; the card on top fades+scales.                  */
+
+@keyframes row-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);  }
+}
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(-4px) scale(0.995); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);     }
+}
+@keyframes side-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0);   }
+}
+
+@utility anim-row-enter {
+  animation: row-enter 360ms var(--ease-out) backwards;
+}
+@utility anim-card-enter {
+  animation: card-enter 320ms var(--ease-out) backwards;
+}
+@utility anim-side-enter {
+  animation: side-enter 280ms var(--ease-out) backwards;
+}
+
+/* Skeleton placeholder shimmer */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.95; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Tooltip — see components/Tooltip.tsx.
+ *
+ * Positioning: the JS computes the final clamped (left, top) and writes
+ * them as inline pixel values — the bubble itself never carries a
+ * centring `translate(-50%)`. That makes the entrance animation a
+ * straightforward `translateY` slide + opacity fade, with no calc()
+ * gymnastics or CSS variable hand-offs.
+ *
+ * Three-phase state machine via `data-phase` (see Tooltip.tsx):
+ *  - `measuring` — laid out but `visibility: hidden`, so JS can read
+ *    accurate getBoundingClientRect numbers.
+ *  - `open`      — entrance keyframe runs, bubble is visible.
+ *  - (closed)    — element is unmounted by Solid; nothing to style.
+ *
+ * `data-placement` flips the slide direction so the bubble appears to
+ * "drop out of" the trigger, not flop towards it.
+ *
+ * `data-reduced-motion="1"` keeps just the fade.
+ * ────────────────────────────────────────────────────────────────── */
+.tooltip-pop {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  user-select: none;
+}
+.tooltip-pop[data-phase="measuring"] {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.tooltip-bubble {
+  /* Supabase-style: flat, sharp, low-opacity border, almost no rounding,
+     no backdrop-filter. Reads as "a label that just appeared", not as a
+     glass card.
+     Always dark, regardless of theme — like Linear / Vercel / Supabase
+     do for their tooltips. The contrast against the chrome it's pointing
+     at is what makes a tooltip read as "this is auxiliary info", not
+     part of the page. Inverted in light mode would muddy that signal. */
+  border-radius: 6px;
+  padding: 6px 10px;
+  text-align: left;
+  /* No min-width — short hints stay short, long ones grow up to 260 px. */
+  max-width: 260px;
+  background-color: #18191b;
+  /* Hairline 1 px border at low alpha — the trick Supabase / Linear /
+     Vercel all use to make tooltips look "cut out of the page". */
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* One soft shadow, not a glow. Keep the offset small so the tooltip
+     sits flush against its trigger instead of floating in space. */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 4px 12px -4px rgba(0, 0, 0, 0.30);
+  /* Crisper text — backdrop-filter blurs subpixel rendering. */
+  -webkit-font-smoothing: antialiased;
+}
+
+.tooltip-bubble .tooltip-title {
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  /* Always-dark bubble → always-light text. Hard-coded so light theme
+     doesn't render white-on-white. */
+  color: #f4f4f5;
+}
+.tooltip-bubble .tooltip-body {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #a1a1aa;
+}
+
+.tooltip-kbd {
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 16px;
+  color: #d4d4d8;
+}
+
+@keyframes tooltip-enter-from-above {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes tooltip-enter-from-below {
+  from { opacity: 0; transform: translateY(4px)  scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes tooltip-enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tooltip-pop[data-phase="open"][data-placement="top"] {
+  transform-origin: center bottom;
+  animation: tooltip-enter-from-above 180ms cubic-bezier(0.22, 0.9, 0.28, 1) backwards;
+}
+.tooltip-pop[data-phase="open"][data-placement="bottom"] {
+  transform-origin: center top;
+  animation: tooltip-enter-from-below 180ms cubic-bezier(0.22, 0.9, 0.28, 1) backwards;
+}
+.tooltip-pop[data-reduced-motion="1"] {
+  animation-name: tooltip-enter-fade;
+}
+
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-tint-1) 0%,
+    var(--color-tint-3) 50%,
+    var(--color-tint-1) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite, skeleton-pulse 2.4s ease-in-out infinite;
+  border-radius: var(--radius-1);
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---------- modal overlay & card --------------------------------------- */
+.modal-overlay {
+  background: color-mix(in srgb, var(--color-bg-0) 55%, transparent);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.modal-overlay[data-open="true"] { opacity: 1; }
+
+.modal-card {
+  opacity: 0;
+  transform: translateY(6px) scale(0.985);
+  transition:
+    opacity   var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+  box-shadow:
+    0 1px 0 0 var(--color-line-strong) inset,
+    0 0 0 1px var(--color-line),
+    0 24px 48px -16px rgba(0, 0, 0, 0.55),
+    0 8px 24px -12px rgba(0, 0, 0, 0.35);
+}
+.modal-card[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+:root[data-theme="light"] .modal-card {
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.8) inset,
+    0 0 0 1px var(--color-line),
+    0 24px 48px -16px rgba(15, 18, 25, 0.18),
+    0 8px 24px -12px rgba(15, 18, 25, 0.10);
+}
+
+/* ---------- inputs with leading icon ----------------------------------- */
+.input-wrap {
+  position: relative;
+}
+.input-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.input-with-icon {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2);
+  background: var(--color-bg-0);
+  padding: 7px 10px 7px 30px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-fg-0);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow   var(--dur-fast) var(--ease-out);
+}
+.input-with-icon::placeholder { color: var(--color-fg-3); }
+.input-with-icon:focus {
+  border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+/* ---------- tactile press feedback -------------------------------------- */
+/*  `.tactile`     — buttons & pills: smooth hover + scale-on-press.        */
+/*  `.tactile-row` — list rows: smooth bg only, slight darken on press.     */
+/*  `.tactile-fx`  — extra micro-lift on hover (use sparingly).             */
+/*                                                                          */
+/*  Respects prefers-reduced-motion (handled by `@media` block at bottom).  */
+
+@utility tactile {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color            var(--dur-fast) var(--ease-out),
+    border-color     var(--dur-base) var(--ease-out),
+    transform        var(--dur-fast) var(--ease-out),
+    box-shadow       var(--dur-base) var(--ease-out),
+    opacity          var(--dur-base) var(--ease-out);
+  will-change: transform, background-color;
+  -webkit-tap-highlight-color: transparent;
+}
+.tactile:active:not(:disabled) {
+  transform: scale(0.965);
+  transition-duration: 60ms;
+}
+
+@utility tactile-row {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color            var(--dur-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.tactile-row:active:not(:disabled) {
+  background-color: var(--color-tint-3);
+  transition-duration: 40ms;
+}
+
+@utility tactile-lift {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color            var(--dur-fast) var(--ease-out),
+    transform        var(--dur-base) var(--ease-spring),
+    box-shadow       var(--dur-base) var(--ease-out);
+}
+.tactile-lift:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.tactile-lift:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 60ms;
+}
+
+/* Buttons & links default to the tactile micro-press */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    transform: none !important;
+  }
+}

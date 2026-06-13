@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "v2pn",
+  "version": "0.1.0",
+  "identifier": "io.v2pn.app",
+  "build": {
+    "beforeDevCommand": "pnpm --filter v2pn-frontend dev",
+    "beforeBuildCommand": "pnpm --filter v2pn-frontend build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "v2pn",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 880,
+        "minHeight": 580,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "shadow": true,
+        "center": true,
+        "backgroundColor": "#08090A"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ipc:; script-src 'self'"
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Utility",
+    "shortDescription": "Secure proxy client",
+    "longDescription": "v2pn — beautifully animated, security-first proxy client for VLESS / REALITY / Hysteria2 / Trojan / SS-2022 / VMess / TUIC / AnyTLS / WireGuard / SSH subscriptions. Built in Rust + Tauri 2.",
+    "externalBin": ["binaries/sing-box"],
+    "resources": ["binaries/wintun.dll"]
+  },
+  "plugins": {}
+}
