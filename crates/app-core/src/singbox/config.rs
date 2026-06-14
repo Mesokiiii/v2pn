@@ -32,6 +32,38 @@ pub struct ConnectionOptions {
     pub ipv6: bool,
     pub strict_dns: bool,
     pub tun_interface_name: String,
+    /// ISO-3166 alpha-2 country codes whose domains and IP blocks should
+    /// **skip** the VPN tunnel and go direct. The "anti-censorship VPN"
+    /// pattern: a Russian user wants Sberbank, Госуслуги, Yandex to keep
+    /// working at full RU-CDN speed without bank-fraud freeze; a Chinese
+    /// user wants Alipay/WeChat to do the same; an Iranian user wants
+    /// Snapp/Tap30. Driven by sing-box's public `geosite-<cc>` and
+    /// `geoip-<cc>` rule-sets.
+    ///
+    /// Empty list = nothing bypassed = pure tunnel-everything mode.
+    /// Default is `["ru"]` since most v2pn users are in Russia, but the
+    /// UI surfaces the full picker.
+    #[serde(default = "default_bypass_country_codes")]
+    pub bypass_country_codes: Vec<String>,
+    /// User-authored bypass rules. Each line is one rule, in any of:
+    ///   - `example.com`         → exact domain match
+    ///   - `*.example.com`       → suffix match
+    ///   - `192.168.0.0/16`      → IPv4 CIDR
+    ///   - `2001:db8::/32`       → IPv6 CIDR
+    ///   - `1.2.3.4`             → single IP (treated as /32)
+    /// Lines starting with `#` are comments. Blank lines ignored.
+    #[serde(default)]
+    pub custom_bypass_rules: Vec<String>,
+    /// Backwards-compat for the previous `bypass_ru: bool`. Deserialised
+    /// from old config files; migrated into `bypass_country_codes` at
+    /// load time. Never written back. Hidden from serde so it doesn't
+    /// pollute new state.
+    #[serde(default, skip_serializing)]
+    pub bypass_ru: Option<bool>,
+}
+
+fn default_bypass_country_codes() -> Vec<String> {
+    vec!["ru".to_string()]
 }
 
 impl Default for ConnectionOptions {
@@ -43,6 +75,9 @@ impl Default for ConnectionOptions {
             ipv6: false,
             strict_dns: true,
             tun_interface_name: "v2pn-tun".to_string(),
+            bypass_country_codes: default_bypass_country_codes(),
+            custom_bypass_rules: Vec::new(),
+            bypass_ru: None,
         }
     }
 }
@@ -271,12 +306,158 @@ fn build_route(opts: &ConnectionOptions, profiles: &[ProxyProfile]) -> Value {
         rules.push(json!({ "process_name": ["sing-box.exe"], "outbound": "direct" }));
     }
 
-    json!({
+    // 5. Country-bypass + custom user rules ("anti-censorship VPN"
+    // mode generalised). Per-country sing-box rule-sets short-circuit
+    // matching domains/IPs to `direct`. User-supplied custom rules sit
+    // alongside, parsed into the appropriate sing-box matcher
+    // (`domain_suffix`, `domain`, `ip_cidr`).
+    let mut rule_set = Vec::<Value>::new();
+    let mut country_rule_set_tags: Vec<String> = Vec::new();
+
+    for raw in &opts.bypass_country_codes {
+        let cc = raw.trim().to_ascii_lowercase();
+        // ISO-3166 alpha-2 only — defend the URL builder against
+        // accidental injection from older state files.
+        if cc.len() != 2 || !cc.chars().all(|c| c.is_ascii_lowercase()) {
+            tracing::warn!(target: "singbox::config",
+                "ignoring non-ISO bypass country code: {raw:?}");
+            continue;
+        }
+        let geosite_tag = format!("geosite-{cc}");
+        let geoip_tag = format!("geoip-{cc}");
+        // SagerNet's `sing-geosite` rule-set branch only publishes a
+        // bare `geosite-cn.srs` for China — every other country lives
+        // under the `category-<cc>` namespace (e.g.
+        // `geosite-category-ru.srs`, `geosite-category-ir.srs`).
+        // Building `geosite-{cc}.srs` for non-CN yields a 404, which
+        // sing-box then surfaces as `initial rule-set: ...: unexpected
+        // status: 404 Not Found` and aborts startup.
+        let geosite_file = if cc == "cn" {
+            "geosite-cn".to_string()
+        } else {
+            format!("geosite-category-{cc}")
+        };
+        rule_set.push(json!({
+            "tag": geosite_tag,
+            "type": "remote",
+            "format": "binary",
+            // SagerNet's curated per-country site list — covers what
+            // matters in that locale (banks, gov, top media, top
+            // e-commerce). Updates weekly; sing-box auto-refreshes.
+            "url": format!(
+                "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/{geosite_file}.srs"
+            ),
+            "download_detour": "direct",
+            "update_interval": "7d"
+        }));
+        rule_set.push(json!({
+            "tag": geoip_tag,
+            "type": "remote",
+            "format": "binary",
+            "url": format!(
+                "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-{cc}.srs"
+            ),
+            "download_detour": "direct",
+            "update_interval": "7d"
+        }));
+        country_rule_set_tags.push(geosite_tag);
+        country_rule_set_tags.push(geoip_tag);
+    }
+
+    if !country_rule_set_tags.is_empty() {
+        rules.push(json!({
+            "rule_set": country_rule_set_tags,
+            "outbound": "direct"
+        }));
+    }
+
+    // Custom rules: user-authored lines parsed into discrete rule
+    // entries. We sort each line into one of three buckets (domain
+    // exact, domain suffix, ip_cidr) and emit at most one rule per
+    // bucket so sing-box loads efficiently.
+    let parsed = parse_custom_bypass_rules(&opts.custom_bypass_rules);
+    if !parsed.exact_domains.is_empty() {
+        rules.push(json!({ "domain": parsed.exact_domains, "outbound": "direct" }));
+    }
+    if !parsed.domain_suffixes.is_empty() {
+        rules.push(json!({ "domain_suffix": parsed.domain_suffixes, "outbound": "direct" }));
+    }
+    if !parsed.ip_cidrs.is_empty() {
+        rules.push(json!({ "ip_cidr": parsed.ip_cidrs, "outbound": "direct" }));
+    }
+    let mut out = json!({
         "auto_detect_interface": true,
         "default_domain_resolver": "dns-direct",
         "rules": rules,
         "final": "proxy"
-    })
+    });
+    if !rule_set.is_empty() {
+        out.as_object_mut()
+            .expect("route is object")
+            .insert("rule_set".into(), Value::Array(rule_set));
+    }
+    out
+}
+
+/// Bucketised parsed result. Public so the UI can preview what its
+/// custom rules would compile into before pressing Save.
+#[derive(Debug, Default, Clone, serde::Serialize)]
+pub struct CustomBypassPub {
+    pub exact_domains: Vec<String>,
+    pub domain_suffixes: Vec<String>,
+    pub ip_cidrs: Vec<String>,
+}
+
+/// Parse the user's free-form bypass rules into typed buckets. Tolerant
+/// to whitespace, comments, blank lines, and the leading `*.` /
+/// trailing `/` users habitually paste. Anything we can't make sense of
+/// is silently dropped.
+pub fn parse_custom_bypass_rules(lines: &[String]) -> CustomBypassPub {
+    use std::net::IpAddr;
+    use std::str::FromStr;
+
+    let mut out = CustomBypassPub::default();
+    for raw in lines {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        // Bare IP → /32 or /128
+        if let Ok(ip) = IpAddr::from_str(line) {
+            let cidr = match ip {
+                IpAddr::V4(v4) => format!("{v4}/32"),
+                IpAddr::V6(v6) => format!("{v6}/128"),
+            };
+            out.ip_cidrs.push(cidr);
+            continue;
+        }
+        // CIDR
+        if let Some((ip_part, mask_part)) = line.split_once('/') {
+            if IpAddr::from_str(ip_part).is_ok() && mask_part.parse::<u8>().is_ok() {
+                out.ip_cidrs.push(line.to_string());
+                continue;
+            }
+        }
+        // Wildcard suffix `*.example.com`
+        if let Some(stripped) = line.strip_prefix("*.") {
+            if !stripped.is_empty() {
+                out.domain_suffixes.push(stripped.to_string());
+                continue;
+            }
+        }
+        // Bare suffix shorthand `.ozon.com`
+        if let Some(stripped) = line.strip_prefix('.') {
+            if !stripped.is_empty() {
+                out.domain_suffixes.push(stripped.to_string());
+                continue;
+            }
+        }
+        // Otherwise treat as an exact domain. Lower-cased so the
+        // sing-box matcher (case-sensitive) doesn't miss user-typed
+        // capital letters.
+        out.exact_domains.push(line.to_ascii_lowercase());
+    }
+    out
 }
 
 /* ============================================================ outbound */
@@ -545,5 +726,50 @@ mod tests {
         let third = &rules[2];
         assert_eq!(third["outbound"], "direct");
         assert!(third["ip_cidr"].is_array());
+    }
+
+    #[test]
+    fn geosite_rule_set_url_uses_category_prefix_for_non_cn() {
+        // Regression: `https://raw.githubusercontent.com/SagerNet/sing-geosite/
+        // rule-set/geosite-ru.srs` is a 404. Russia (and every other non-CN
+        // country) lives under the `category-<cc>` namespace; only China has
+        // a top-level `geosite-cn.srs`. If this drifts back to the old
+        // `geosite-{cc}` shape, sing-box aborts startup with
+        // "initial rule-set: geosite-ru: unexpected status: 404 Not Found".
+        let opts = ConnectionOptions {
+            bypass_country_codes: vec!["ru".into(), "cn".into(), "ir".into()],
+            ..Default::default()
+        };
+        let cfg = build_config(&vless_reality(), &opts);
+        let rs = cfg["route"]["rule_set"].as_array().expect("rule_set array");
+
+        let url_for = |tag: &str| -> String {
+            rs.iter()
+                .find(|e| e["tag"] == tag)
+                .unwrap_or_else(|| panic!("missing rule_set entry {tag}: {rs:#?}"))
+                ["url"]
+                .as_str()
+                .expect("url is string")
+                .to_string()
+        };
+
+        assert_eq!(
+            url_for("geosite-ru"),
+            "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ru.srs",
+        );
+        assert_eq!(
+            url_for("geosite-ir"),
+            "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ir.srs",
+        );
+        // CN is the special case — there is no `geosite-category-cn.srs`.
+        assert_eq!(
+            url_for("geosite-cn"),
+            "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs",
+        );
+        // geoip URLs were already correct; lock them in too.
+        assert_eq!(
+            url_for("geoip-ru"),
+            "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
+        );
     }
 }

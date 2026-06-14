@@ -52,6 +52,10 @@ export type ConnectionOptions = {
   ipv6: boolean;
   strict_dns: boolean;
   tun_interface_name: string;
+  /** ISO-3166 alpha-2 codes whose traffic skips the VPN. */
+  bypass_country_codes: string[];
+  /** User-authored bypass rules (one per line). See settings UI. */
+  custom_bypass_rules: string[];
 };
 
 export type ConnectionState =
@@ -90,6 +94,21 @@ export type ElevationStatus = {
   supported: boolean;
 };
 
+/** One entry in the network-repair report. */
+export type RepairStep = {
+  id: string;
+  label_key: string;
+  ok: boolean;
+  detail: string;
+  took_ms: number;
+};
+
+export type RepairReport = {
+  steps: RepairStep[];
+  started_at: number;
+  finished_at: number;
+};
+
 export const api = {
   ping: () => invoke<string>("ping"),
 
@@ -119,6 +138,8 @@ export const api = {
   activeServerId: () => invoke<string | null>("active_server_id"),
   setConnectionMode: (mode: ConnectionMode) =>
     invoke<void>("set_connection_mode", { mode }),
+  setRouting: (countryCodes: string[], customRules: string[]) =>
+    invoke<void>("set_routing", { countryCodes, customRules }),
   getConnectionOptions: () => invoke<ConnectionOptions>("get_connection_options"),
 
   probeLatencyBatch: (profiles: ProxyProfile[]) =>
@@ -129,6 +150,7 @@ export const api = {
 
   openLogsFolder: () => invoke<string>("open_logs_folder"),
   diagnostics: () => invoke<Record<string, unknown>>("diagnostics"),
+  repairNetwork: () => invoke<RepairReport>("repair_network"),
 };
 
 export const events = {

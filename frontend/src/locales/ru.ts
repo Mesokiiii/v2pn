@@ -25,6 +25,21 @@ export const ru = {
     addSubscription: "Добавить подписку",
   },
 
+  common: {
+    cancel: "Отмена",
+    confirm: "Подтвердить",
+    delete: "Удалить",
+    save: "Сохранить",
+  },
+
+  sidebar: {
+    removeAria: "Удалить подписку",
+    removeConfirmTitle: "Удалить «{name}»?",
+    removeConfirmBody:
+      "Все её серверы исчезнут из v2pn. Сама подписка у провайдера не отменяется — её можно добавить снова. Действие нельзя отменить.",
+    removeConfirmCta: "Удалить подписку",
+  },
+
   connection: {
     connect: "Подключиться",
     disconnect: "Отключиться",
@@ -149,6 +164,23 @@ export const ru = {
     modeTunHint:
       "Виртуальный сетевой адаптер уровня L3 через Wintun. Перехватывает весь трафик. Требует прав администратора.",
 
+    sectionRouting: "Маршрутизация",
+    sectionRoutingHint:
+      "Что отправлять через VPN, а что — напрямую через ваш обычный интернет.",
+    routingCountries: "Страны (трафик идёт напрямую)",
+    routingCountriesHint:
+      "Отметьте страны, где вы пользуетесь местными сервисами — банки, госуслуги, магазины пойдут мимо VPN. Списки доменов и IP обновляются автоматически из открытой базы SagerNet.",
+    routingCustom: "Свои правила",
+    routingCustomHint:
+      "По одной строке: example.com (точно), *.banks.com или .banks.com (поддомены), 1.2.3.4, 10.0.0.0/8 (IP/CIDR). Строки с # — комментарий.",
+    routingDomains: "доменов",
+    routingSuffixes: "суффиксов",
+    routingCidrs: "IP/CIDR",
+    routingClean: "Изменений нет",
+    routingDirty: "Есть несохранённые изменения",
+    routingReconnect: "После Save переподключитесь чтобы правила применились",
+    routingSaving: "Сохраняю…",
+
     sectionPorts: "Сетевые порты",
     sectionPortsHint: "Только loopback. Изменение требует переподключения.",
     portMixed: "SOCKS + HTTP",
@@ -173,6 +205,27 @@ export const ru = {
     aboutWintun: "Wintun",
     openLogs: "Открыть папку логов",
     copyDiagnostics: "Скопировать диагностику",
+
+    sectionRepair: "Восстановить сеть",
+    sectionRepairHint:
+      "Если интернет сломался после VPN — кнопка ниже сбросит всё к чистому состоянию.",
+    repairDescription:
+      "Жёстко чистит наследие любого VPN-клиента: останавливает sing-box, выключает системный прокси, удаляет TUN-адаптеры (наш + от Hiddify, NekoBox, Karing, v2raya), сбрасывает кеш DNS и ARP, перерегистрирует записи DHCP. Не требует прав администратора, не перезагружает машину.",
+    repairAction: "Починить соединение",
+    repairRunning: "Восстанавливаю…",
+    repairConfirmTitle: "Восстановить сеть?",
+    repairConfirmBody:
+      "Активное VPN-соединение будет разорвано. Вернётся обычный интернет напрямую. Запускать стоит, если из-за чужого VPN-клиента сломались Wi-Fi/браузер.",
+    repairConfirmCta: "Запустить починку",
+    repairResult: "Готово: {ok} из {total} шагов успешны",
+
+    "repair.stopSingbox": "Остановка sing-box",
+    "repair.clearProxy": "Сброс системного прокси Windows",
+    "repair.wintunCleanup": "Удаление зависших TUN-адаптеров",
+    "repair.flushDns": "Очистка кеша DNS (ipconfig /flushdns)",
+    "repair.renewDhcp": "Перерегистрация DHCP/DNS",
+    "repair.arpFlush": "Очистка ARP-кеша",
+    "repair.notifyWininet": "Уведомление Wininet о смене настроек",
   },
 
   logs: {

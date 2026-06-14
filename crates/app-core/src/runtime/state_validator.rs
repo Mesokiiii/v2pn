@@ -40,10 +40,6 @@ use crate::supervisor::{ConnectionState, Supervisor};
 /// outage is acted on before users notice.
 const INTERVAL: Duration = Duration::from_secs(10);
 
-/// HTTP timeout for the clash API probe. Matched to `watchdog` so the two
-/// tasks see the same world-view.
-const HTTP_TIMEOUT: Duration = Duration::from_millis(1500);
-
 /// Number of consecutive ticks with at least one failing signal before we
 /// trip a self-heal. `2` gives roughly 20 s of grace, which covers a
 /// power-resume race or a brief NIC reset without flapping.
@@ -60,19 +56,6 @@ pub fn new_stop_handle() -> StopHandle {
 /// Tauri host we use `tauri::async_runtime::spawn`. The function only
 /// returns when `stop` is notified or dropped.
 pub async fn run(supervisor: Arc<Supervisor>, mixed_port: u16, clash_api_port: u16, stop: StopHandle) {
-    let clash_url = format!("http://127.0.0.1:{}/version", clash_api_port);
-    let client = match reqwest::Client::builder()
-        .no_proxy()
-        .timeout(HTTP_TIMEOUT)
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!(target: "validator", "client build failed: {e}");
-            return;
-        }
-    };
-
     let mut consecutive_fail: u32 = 0;
 
     loop {
@@ -114,21 +97,21 @@ pub async fn run(supervisor: Arc<Supervisor>, mixed_port: u16, clash_api_port: u
         // Signal 2: clash_api responsive. A 200 from /version means the
         // entire HTTP stack is alive inside sing-box, which transitively
         // implies the goroutine scheduler is fine.
-        let resp_result = {
-            let mut req = client.get(&clash_url);
-            if let Some(s) = supervisor.clash_secret() {
-                req = req.bearer_auth(s);
+        let secret = supervisor.clash_secret();
+        match crate::clash_api::Client::new(clash_api_port, secret) {
+            Err(e) => {
+                tracing::warn!(target: "validator", "clash_api client build: {e}");
+                failed_signals.push("clash_api client build failed");
             }
-            req.send().await
-        };
-        match resp_result {
-            Ok(r) if r.status().is_success() => {}
-            Ok(r) => failed_signals.push(match r.status().as_u16() {
-                404 => "clash_api 404 (server up but unexpected version handler)",
-                401 | 403 => "clash_api 401/403 (secret out of sync)",
-                _ => "clash_api non-2xx",
-            }),
-            Err(_) => failed_signals.push("clash_api unreachable"),
+            Ok(c) => match c.get_version().await {
+                Ok(r) if r.status().is_success() => {}
+                Ok(r) => failed_signals.push(match r.status().as_u16() {
+                    404 => "clash_api 404 (server up but unexpected version handler)",
+                    401 | 403 => "clash_api 401/403 (secret out of sync)",
+                    _ => "clash_api non-2xx",
+                }),
+                Err(_) => failed_signals.push("clash_api unreachable"),
+            },
         }
 
         // Signal 3: mixed-port listening. A successful TCP connect to the

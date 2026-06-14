@@ -12,11 +12,11 @@ use std::time::Duration;
 
 use tokio::sync::Notify;
 
+use crate::clash_api;
 use crate::supervisor::{ConnectionState, Supervisor};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const FAILURE_BUDGET: u32 = 3;
-const REQUEST_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Stop handle. Drop or `notify_one()` to terminate the loop.
 pub type StopHandle = Arc<Notify>;
@@ -27,19 +27,6 @@ pub fn new_stop_handle() -> StopHandle {
 
 /// Returns the watchdog `Future`. Spawn it with your runtime of choice.
 pub async fn run(supervisor: Arc<Supervisor>, clash_api_port: u16, stop: StopHandle) {
-    let url = format!("http://127.0.0.1:{}/version", clash_api_port);
-    let client = match reqwest::Client::builder()
-        .no_proxy()
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!(target: "watchdog", "client build failed: {e}");
-            return;
-        }
-    };
-
     let mut consecutive_failures: u32 = 0;
     loop {
         tokio::select! {
@@ -55,13 +42,18 @@ pub async fn run(supervisor: Arc<Supervisor>, clash_api_port: u16, stop: StopHan
             continue;
         }
 
-        match {
-            let mut req = client.get(&url);
-            if let Some(s) = supervisor.clash_secret() {
-                req = req.bearer_auth(s);
+        // Build a fresh client per tick — the secret can rotate
+        // between connects, and clash_api::Client clones the secret
+        // by value at construction time. Construction is a few µs.
+        let client = match clash_api::Client::new(clash_api_port, supervisor.clash_secret()) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(target: "watchdog", "client build failed: {e}");
+                continue;
             }
-            req.send().await
-        } {
+        };
+
+        match client.get_version().await {
             Ok(resp) if resp.status().is_success() => {
                 if consecutive_failures > 0 {
                     tracing::info!(target: "watchdog",

@@ -17,6 +17,21 @@ export const en: Locale = {
     addSubscription: "Add subscription",
   },
 
+  common: {
+    cancel: "Cancel",
+    confirm: "Confirm",
+    delete: "Delete",
+    save: "Save",
+  },
+
+  sidebar: {
+    removeAria: "Remove subscription",
+    removeConfirmTitle: "Remove “{name}”?",
+    removeConfirmBody:
+      "All its servers will disappear from v2pn. Your provider account is unaffected — you can add it again later. This action cannot be undone.",
+    removeConfirmCta: "Remove subscription",
+  },
+
   connection: {
     connect: "Connect",
     disconnect: "Disconnect",
@@ -140,6 +155,23 @@ export const en: Locale = {
     modeTunHint:
       "Layer-3 virtual adapter via Wintun. Captures every packet from every app. Requires admin privileges.",
 
+    sectionRouting: "Routing",
+    sectionRoutingHint:
+      "Which traffic goes through the VPN and which goes direct via your regular internet.",
+    routingCountries: "Countries (traffic goes direct)",
+    routingCountriesHint:
+      "Pick the countries where you use local services — banks, gov, shops will skip the VPN. Domain and IP lists are auto-updated from SagerNet's open dataset.",
+    routingCustom: "Custom rules",
+    routingCustomHint:
+      "One per line: example.com (exact), *.banks.com or .banks.com (suffix), 1.2.3.4, 10.0.0.0/8 (IP/CIDR). Lines starting with # are comments.",
+    routingDomains: "domains",
+    routingSuffixes: "suffixes",
+    routingCidrs: "IP/CIDR",
+    routingClean: "No changes",
+    routingDirty: "Unsaved changes",
+    routingReconnect: "Reconnect after Save to apply the new rules",
+    routingSaving: "Saving…",
+
     sectionPorts: "Network ports",
     sectionPortsHint: "Loopback only. Change requires reconnect.",
     portMixed: "Mixed (SOCKS + HTTP)",
@@ -164,6 +196,27 @@ export const en: Locale = {
     aboutWintun: "Wintun",
     openLogs: "Open logs folder",
     copyDiagnostics: "Copy diagnostics",
+
+    sectionRepair: "Repair network",
+    sectionRepairHint:
+      "If your internet broke after using a VPN — the button below resets everything to a clean state.",
+    repairDescription:
+      "Forcefully cleans up after any VPN client: stops sing-box, disables the system proxy, removes TUN adapters (ours + Hiddify / NekoBox / Karing / v2raya), flushes DNS and ARP caches, re-registers DHCP. No admin required, no reboot.",
+    repairAction: "Repair network",
+    repairRunning: "Repairing…",
+    repairConfirmTitle: "Repair the network?",
+    repairConfirmBody:
+      "Your active VPN connection will be terminated and direct internet restored. Use this if a different VPN client left your Wi-Fi or browsers broken.",
+    repairConfirmCta: "Run repair",
+    repairResult: "Done: {ok} of {total} steps succeeded",
+
+    "repair.stopSingbox": "Stop sing-box",
+    "repair.clearProxy": "Clear Windows system proxy",
+    "repair.wintunCleanup": "Remove stale TUN adapters",
+    "repair.flushDns": "Flush DNS cache (ipconfig /flushdns)",
+    "repair.renewDhcp": "Re-register DHCP/DNS",
+    "repair.arpFlush": "Flush ARP cache",
+    "repair.notifyWininet": "Notify Wininet of new settings",
   },
 
   logs: {

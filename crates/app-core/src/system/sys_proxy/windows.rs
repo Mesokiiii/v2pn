@@ -106,7 +106,7 @@ impl SystemProxy for WindowsSystemProxy {
 /// Tell Wininet to re-read settings. Without this, browsers/Electron apps
 /// continue using stale proxy info until they're restarted (or, often,
 /// until reboot — exactly the bug the user complained about).
-fn notify_wininet() {
+pub fn notify_wininet() {
     use ::windows::Win32::Networking::WinInet::{
         InternetSetOptionW, INTERNET_OPTION_PROXY_SETTINGS_CHANGED, INTERNET_OPTION_REFRESH,
     };

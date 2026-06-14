@@ -93,6 +93,15 @@ export async function setMode(mode: ConnectionMode): Promise<void> {
   setOptions(opts);
 }
 
+export async function setRouting(
+  countryCodes: string[],
+  customRules: string[],
+): Promise<void> {
+  await api.setRouting(countryCodes, customRules);
+  const opts = await api.getConnectionOptions();
+  setOptions(opts);
+}
+
 export function clearLogs() {
   setLogs([]);
 }

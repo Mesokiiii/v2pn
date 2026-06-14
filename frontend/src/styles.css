@@ -347,6 +347,335 @@ h1, h2, h3, h4 { letter-spacing: -0.018em; }
   animation-name: tooltip-enter-fade;
 }
 
+/* ──────────────────────────────────────────────────────────────────────
+ * Confirmation dialog — see components/ConfirmDialog.tsx.
+ *
+ * Layered visual system:
+ *   ┌────────────────────────────────┐
+ *   │  [icon]  Title                 │  header (24px padding, no bottom)
+ *   │          Body copy …           │  body
+ *   │ ── gradient hairline ───────── │  ← the "designer line": fades to
+ *   │     [Cancel]   [Confirm]       │    transparent at both ends
+ *   └────────────────────────────────┘
+ *
+ * Card stays consistent across themes via CSS variables. Destructive
+ * variant (delete subscription / wipe data / …) recolours the primary
+ * button + the icon glow to a red palette.
+ *
+ * Quality details:
+ *   - Inner top highlight (1 px white-at-low-alpha) gives the "raised
+ *     glass sheet" feel macOS sheets have.
+ *   - Multi-layer drop shadow (close + far) plants the modal in the
+ *     scene without bloom or fog.
+ *   - The backdrop blur is gentle (6 px) so app chrome behind stays
+ *     legible — user is making a decision, not being immersed.
+ * ────────────────────────────────────────────────────────────────── */
+@keyframes confirm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes confirm-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes confirm-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes confirm-card-out {
+  from { opacity: 1; transform: translateY(0)    scale(1); }
+  to   { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+@keyframes confirm-icon-glow {
+  /* Soft halo pulse the very first frame the modal appears, then
+     settles. Subtle — at full opacity for ~120 ms then fades. */
+  0%   { box-shadow: 0 0 0 0 var(--confirm-glow-color); }
+  60%  { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(8, 9, 10, 0.55);
+  backdrop-filter: blur(6px) saturate(0.85);
+  -webkit-backdrop-filter: blur(6px) saturate(0.85);
+  animation: confirm-fade-in 180ms cubic-bezier(0.22, 0.9, 0.28, 1) both;
+}
+.confirm-backdrop[data-exiting="1"] {
+  animation: confirm-fade-out 160ms ease-out both;
+}
+
+.confirm-card {
+  position: relative;
+  width: min(440px, 100%);
+  /* Two-stop background gives the card a faint top→bottom gradient that
+     reads as "lit from above" without being literally a window-light
+     gradient. Matches the chrome of the app's main surfaces. */
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-bg-2) 100%, white 0%) 0%,
+      var(--color-bg-2) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--color-line) 90%, transparent);
+  border-radius: 14px;
+  /* Keep zero padding here — `confirm-header / confirm-body / confirm-footer`
+     each carry their own. */
+  padding: 0;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.025) inset,           /* inner top highlight */
+    0 1px 0 0 rgba(255, 255, 255, 0.05) inset,           /* crisp 1 px specular */
+    0 28px 56px -16px rgba(0, 0, 0, 0.55),               /* far diffused */
+    0 8px 16px -4px rgba(0, 0, 0, 0.30);                 /* near contact shadow */
+  animation: confirm-card-in 220ms cubic-bezier(0.22, 0.9, 0.28, 1) both;
+}
+.confirm-backdrop[data-exiting="1"] .confirm-card {
+  animation: confirm-card-out 160ms ease-out both;
+}
+
+.confirm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--color-fg-3);
+  transition: background 150ms, color 150ms;
+}
+.confirm-close:hover {
+  background: var(--color-tint-2);
+  color: var(--color-fg-0);
+}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.confirm-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  padding: 22px 24px 18px 22px;
+}
+
+.confirm-icon {
+  --confirm-glow-color: color-mix(in srgb, var(--color-warn) 35%, transparent);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-warn) 22%, transparent) 0%,
+      color-mix(in srgb, var(--color-warn) 14%, transparent) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--color-warn) 28%, transparent);
+  color: var(--color-warn);
+  animation: confirm-icon-glow 800ms ease-out both;
+}
+.confirm-card[data-destructive="1"] .confirm-icon {
+  --confirm-glow-color: color-mix(in srgb, var(--color-bad) 38%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-bad) 22%, transparent) 0%,
+      color-mix(in srgb, var(--color-bad) 14%, transparent) 100%
+    );
+  border-color: color-mix(in srgb, var(--color-bad) 30%, transparent);
+  color: var(--color-bad);
+}
+
+.confirm-text {
+  min-width: 0;
+  /* Align the text optical baseline with the icon centre. */
+  padding-top: 1px;
+}
+
+.confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--color-fg-0);
+  line-height: 1.3;
+  /* Allow wrapping but keep word-breaks predictable for long subscription
+     names — overflow-wrap so we don't break inside the leading emoji. */
+  overflow-wrap: anywhere;
+}
+.confirm-body {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--color-fg-2);
+}
+
+/* ── The "designer line" ────────────────────────────────────────────
+ *  A 1 px gradient that fades to transparent at the card edges. Picks
+ *  up tint colour from `--color-line` so it stays in-theme. The trick:
+ *  pad horizontally so the line doesn't touch the rounded corner, and
+ *  drive opacity via a horizontal gradient on the line element itself.
+ *  This is the visual delimiter between "what we're asking" and "what
+ *  you're choosing" — the moment of decision.                         */
+.confirm-divider {
+  height: 1px;
+  margin: 0 16px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-fg-0) 14%, transparent) 22%,
+    color-mix(in srgb, var(--color-fg-0) 14%, transparent) 78%,
+    transparent 100%
+  );
+}
+
+/* ── Footer ────────────────────────────────────────────────────────── */
+.confirm-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 14px 18px 16px 18px;
+  background: color-mix(in srgb, var(--color-bg-1) 55%, transparent);
+}
+
+.confirm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: background 140ms, color 140ms, border-color 140ms,
+              transform 80ms ease-out, box-shadow 140ms;
+}
+.confirm-btn:active {
+  transform: translateY(0.5px);
+}
+.confirm-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+.confirm-btn--ghost {
+  background: transparent;
+  color: var(--color-fg-1);
+  border: 1px solid color-mix(in srgb, var(--color-line) 100%, transparent);
+}
+.confirm-btn--ghost:hover {
+  background: var(--color-tint-2);
+  color: var(--color-fg-0);
+}
+
+.confirm-btn--primary {
+  background: var(--color-accent);
+  color: white;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent) 65%, black) inset,
+    0 1px 0 0 rgba(255, 255, 255, 0.18) inset,
+    0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.confirm-btn--primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 88%, white);
+}
+
+.confirm-btn--danger {
+  background: var(--color-bad);
+  color: white;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-bad) 60%, black) inset,
+    0 1px 0 0 rgba(255, 255, 255, 0.18) inset,
+    0 1px 2px rgba(0, 0, 0, 0.30);
+}
+.confirm-btn--danger:hover {
+  background: color-mix(in srgb, var(--color-bad) 88%, white);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Settings timeline.
+ *
+ * A 1 px vertical gradient line that runs down the icon column of the
+ * Settings view, passing *through* each section's circular icon. The
+ * icons sit on z-index 1 with an opaque `bg-1` fill, so the line is
+ * visually masked behind them — what you see is a series of dots
+ * connected by a hairline thread. Same trick changelog timelines /
+ * vertical stepper UIs use (Linear, Stripe, Vercel docs).
+ *
+ * The line itself fades to transparent at the very top and bottom so
+ * it doesn't smash into the section header above and the bottom of the
+ * scroll viewport below.
+ *
+ * Geometry: settings content is `px-7` (28 px horizontal padding) and
+ * the section icon is `w-7` (28 px wide) → its visual centre lives at
+ * `28 + 14 = 42 px` from the left edge of `.settings-timeline`.
+ * ────────────────────────────────────────────────────────────────── */
+.settings-timeline {
+  position: relative;
+}
+.settings-timeline::before {
+  content: "";
+  position: absolute;
+  /* px-7 (28) + half of w-7 icon (14) - half of line (~0.5)  ≈ 42 */
+  left: 41px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--color-fg-0) 12%, transparent) 6%,
+    color-mix(in srgb, var(--color-fg-0) 12%, transparent) 94%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* iOS-style boolean toggle. The track is a 36×20 rounded rectangle, the
+ * thumb a 16×16 disc that slides 16 px to the right when on. Width and
+ * track colour transition together so OFF→ON reads as a single motion.
+ * Uses the project's `--color-accent` for the on-state — same colour as
+ * the primary connection action, so the user gets a consistent
+ * "this is the active path" cue. */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 11px;
+  background: var(--color-tint-3);
+  transition: background 180ms cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+.toggle-switch[data-on="1"] {
+  background: var(--color-accent);
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 180ms cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+.toggle-switch[data-on="1"] .toggle-thumb {
+  transform: translateX(16px);
+}
+
 @utility skeleton {
   background: linear-gradient(
     90deg,

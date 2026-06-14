@@ -2,6 +2,7 @@ import { Component, For, Show } from "solid-js";
 import { Globe, Filter, Terminal, Settings, Plus, X } from "lucide-solid";
 import { t } from "~/lib/i18n";
 import { activeId, subscriptions } from "~/stores/subscriptions";
+import { confirm as confirmDialog } from "./ConfirmDialog";
 
 type Section = "servers" | "rules" | "logs" | "settings";
 
@@ -160,13 +161,19 @@ const SubscriptionItem: Component<{
 
     <button
       type="button"
-      onClick={(e) => {
+      onClick={async (e) => {
         e.stopPropagation();
-        props.onRemove();
+        const ok = await confirmDialog({
+          title: t("sidebar.removeConfirmTitle", { name: props.title }),
+          body: t("sidebar.removeConfirmBody"),
+          confirmLabel: t("sidebar.removeConfirmCta"),
+          cancelLabel: t("common.cancel"),
+          destructive: true,
+        });
+        if (ok) props.onRemove();
       }}
       class="tactile absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded text-[var(--color-fg-3)] opacity-0 transition-opacity duration-150 hover:bg-[var(--color-tint-3)] hover:text-[var(--color-bad)] group-hover/sub:opacity-100"
-      aria-label="Remove subscription"
-      title="Remove"
+      aria-label={t("sidebar.removeAria")}
     >
       <X size={11} />
     </button>
