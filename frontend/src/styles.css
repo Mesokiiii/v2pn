@@ -757,6 +757,64 @@ h1, h2, h3, h4 { letter-spacing: -0.018em; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
+/* ---------- btn-onyx — premium graphite primary button ----------------- */
+/*  A near-black, layered button with a 1px polished top-edge highlight,    */
+/*  a crisp inner ring and a soft outer shadow. Reads as the "premium"      */
+/*  primary action both on light and dark themes — the gradient stays dark  */
+/*  in either case, so it always pops against the surface.                  */
+
+@utility btn-onyx {
+  /* The graphite gradient: a hint of light at the top edge that fades to
+     a near-black bottom — the simplest cue that screams "metal" / "glass". */
+  background:
+    linear-gradient(180deg,
+      #2a2b2f 0%,
+      #18191c 48%,
+      #0a0b0d 100%);
+  color: #ffffff;
+  border: 1px solid #000;
+  /* Layered shadows:
+       1) outer 1px ring  — crisp edge against the panel
+       2) inset top hairline — the "polished" highlight
+       3) inset full ring   — softer inner border for depth
+       4) drop 1px          — tight base shadow
+       5) drop 4–12px       — soft floating shadow                          */
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.085),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.32),
+    0 4px 12px rgba(0, 0, 0, 0.18);
+  transition:
+    filter     var(--dur-base) var(--ease-out),
+    transform  var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform, filter;
+}
+.btn-onyx:hover:not(:disabled) {
+  filter: brightness(1.18);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.32),
+    0 6px 18px rgba(0, 0, 0, 0.26);
+}
+.btn-onyx:active:not(:disabled) {
+  filter: brightness(0.95);
+  transform: translateY(0.5px) scale(0.995);
+  transition-duration: 60ms;
+}
+.btn-onyx:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.45);
+  outline-offset: 2px;
+}
+.btn-onyx:disabled {
+  filter: saturate(0.6) brightness(0.7);
+  cursor: not-allowed;
+}
+
 /* ---------- tactile press feedback -------------------------------------- */
 /*  `.tactile`     — buttons & pills: smooth hover + scale-on-press.        */
 /*  `.tactile-row` — list rows: smooth bg only, slight darken on press.     */

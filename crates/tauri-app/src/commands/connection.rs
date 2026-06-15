@@ -8,7 +8,7 @@ use app_core::profile::ProxyProfile;
 use app_core::singbox::config::ConnectionMode;
 use app_core::singbox::sanitize::sanitize_strict;
 use app_core::state_guard::ConnectionGuard;
-use app_core::supervisor::ConnectionState;
+use app_core::supervisor::{ConnectionState, Supervisor};
 use tauri::{AppHandle, Emitter, State};
 
 use super::{AppState, CommandError, LastConnectIntent};
@@ -141,19 +141,47 @@ async fn connect_inner_with_state(
             ConnectionGuard::acquire_proxy(&state.state_dir, &addr, &bypass)?
         }
         ConnectionMode::Tun => {
-            // Best-effort: clear any stale Wintun adapter from a
-            // previous crashed run before we ask sing-box to create a
-            // new one. Without this the kernel can hold the adapter
-            // for several seconds after sing-box dies hard, and the
-            // next start fails with "Cannot create a file when that
-            // file already exists".
-            app_core::wintun_cleanup::cleanup_stale_adapter(&opts.tun_interface_name);
+            // Multi-strategy Wintun cleanup *before* we ask sing-box to
+            // open the adapter. Handles three bad-state cases:
+            //   - previous sing-box was hard-killed (taskkill / OOM)
+            //   - previous sing-box was suspended mid-flight and is
+            //     coming back via the resume auto-reconnect path
+            //   - a competing VPN tool grabbed the same adapter name
+            //
+            // The thorough variant uses wintun.dll's session API to
+            // release the kernel SwDevice handle (the *only* mechanism
+            // that works cross-process) and falls back to `netsh
+            // delete interface` for routing/IP cleanup. Retries with
+            // backoff up to ~5 s.
+            let outcome = app_core::wintun_cleanup::cleanup_thorough_async(
+                &opts.tun_interface_name,
+                app_core::wintun_cleanup::CleanupBudget::FAST,
+            )
+            .await;
+            tracing::debug!(
+                target: "v2pn::connect",
+                ?outcome,
+                adapter = %opts.tun_interface_name,
+                "pre-start wintun cleanup"
+            );
             tracing::debug!(target: "v2pn::connect", "acquiring tun guard");
             ConnectionGuard::acquire_tun(&state.state_dir)?
         }
     };
 
-    if let Err(e) = state.supervisor.start(&cfg, opts.mode).await {
+    // For TUN mode: retry the supervisor start up to 3 times if the
+    // child immediately dies with the wintun half-state error. Each
+    // retry pre-cleans the adapter with the AUTO_RESTART budget (longer
+    // backoff than the FAST one we just ran). This is what keeps the
+    // post-resume reconnect from cementing into a permanent Failed
+    // state when the SwDevice host happens to be slow.
+    let start_outcome = if matches!(opts.mode, ConnectionMode::Tun) {
+        start_tun_with_retry(&state.supervisor, &cfg, opts.mode, &opts.tun_interface_name).await
+    } else {
+        state.supervisor.start(&cfg, opts.mode).await
+    };
+
+    if let Err(e) = start_outcome {
         tracing::error!(target: "v2pn::connect", error = %e, "supervisor.start failed");
         drop(guard);
         return Err(CommandError {
@@ -256,6 +284,115 @@ pub async fn switch_server(
 
     *state.active_selected.lock().await = Some(profile_id);
     Ok(())
+}
+
+/* ----- TUN start retry --------------------------------------------------- */
+
+/// Run [`Supervisor::start`] with the wintun retry loop layered on top.
+/// The supervisor's `start()` returns `Ok(())` as soon as the child has
+/// been spawned — the FATAL "configure tun interface" error happens a
+/// few hundred ms later, surfacing through the death-watcher as
+/// `ConnectionState::Failed`. We poll for that transition for a brief
+/// window after each spawn, and if we see it we run the thorough
+/// wintun cleanup again (with the more aggressive AUTO_RESTART budget)
+/// and respawn — up to a small total cap so a permanently broken
+/// adapter still returns control to the user.
+async fn start_tun_with_retry(
+    supervisor: &Supervisor,
+    cfg: &serde_json::Value,
+    mode: ConnectionMode,
+    tun_name: &str,
+) -> Result<(), app_core::CoreError> {
+    use std::time::{Duration, Instant};
+
+    /// Total attempts we make to start sing-box in TUN mode before
+    /// giving up. The first attempt uses the FAST cleanup budget, the
+    /// rest use AUTO_RESTART (longer waits between retries). Three
+    /// is the empirical sweet spot — the SwDevice host has fully
+    /// settled by the third attempt in every case we've reproduced.
+    const MAX_ATTEMPTS: u32 = 3;
+    /// Window in which we treat a Failed transition as a wintun
+    /// half-state. Sing-box prints the FATAL after ~50–500 ms; 2 s
+    /// is plenty of margin without making the connect feel sluggish.
+    const FAILURE_DETECTION_WINDOW: Duration = Duration::from_millis(2_000);
+    /// Polling step inside that window — short so we react quickly
+    /// once the death-watcher has seen the exit.
+    const POLL_INTERVAL: Duration = Duration::from_millis(75);
+
+    let mut last_err: Option<app_core::CoreError> = None;
+    for attempt in 0..MAX_ATTEMPTS {
+        if attempt > 0 {
+            // Pre-clean before *every* retry, with an aggressive
+            // budget. This is what closes out the wintun-half-state
+            // window without making the user wait for a full minute
+            // of sing-box's own backoff schedule.
+            let outcome = app_core::wintun_cleanup::cleanup_thorough_async(
+                tun_name,
+                app_core::wintun_cleanup::CleanupBudget::AUTO_RESTART,
+            )
+            .await;
+            tracing::warn!(
+                target: "v2pn::connect",
+                attempt,
+                ?outcome,
+                "retrying sing-box start after wintun cleanup"
+            );
+        }
+
+        match supervisor.start(cfg, mode).await {
+            Ok(()) => {
+                // Watch for an immediate Failed transition. The
+                // death-watcher flips state to Failed only on
+                // unexpected exit; that is exactly what wintun-half-
+                // state failures produce (sing-box exits with status 1
+                // shortly after spawn).
+                let deadline = Instant::now() + FAILURE_DETECTION_WINDOW;
+                let mut wintun_fault = false;
+                while Instant::now() < deadline {
+                    if let app_core::supervisor::ConnectionState::Failed { reason } =
+                        supervisor.state()
+                    {
+                        if app_core::wintun_cleanup::looks_like_wintun_failure(&reason) {
+                            wintun_fault = true;
+                            last_err =
+                                Some(app_core::CoreError::Other(format!(
+                                    "wintun half-state on attempt {}: {reason}",
+                                    attempt + 1
+                                )));
+                            break;
+                        }
+                        // A non-wintun failure isn't ours to fix here —
+                        // surface it as-is so the user sees the real
+                        // sing-box error in the UI.
+                        return Err(app_core::CoreError::Other(reason));
+                    }
+                    tokio::time::sleep(POLL_INTERVAL).await;
+                }
+
+                if !wintun_fault {
+                    // Either still Starting or already Connected — both
+                    // are "we got past the wintun race", let the normal
+                    // lifecycle take over.
+                    return Ok(());
+                }
+                // Else fall through to the next retry; the supervisor's
+                // own death-watcher already cleared the child slot.
+            }
+            Err(e) => {
+                last_err = Some(e);
+                // start() failure here is almost always "binary not
+                // found" or "config write failed" — neither of those
+                // benefits from a retry, but the loop's small ceiling
+                // means the cost is negligible.
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| {
+        app_core::CoreError::Other(
+            "sing-box failed to start after retry exhaustion".into(),
+        )
+    }))
 }
 
 /* ----- shutdown helpers -------------------------------------------------- */

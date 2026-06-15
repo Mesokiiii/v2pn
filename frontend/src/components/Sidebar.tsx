@@ -1,10 +1,10 @@
 import { Component, For, Show } from "solid-js";
-import { Globe, Filter, Terminal, Settings, Plus, X } from "lucide-solid";
+import { Globe, Terminal, Settings, Plus, X } from "lucide-solid";
 import { t } from "~/lib/i18n";
 import { activeId, subscriptions } from "~/stores/subscriptions";
 import { confirm as confirmDialog } from "./ConfirmDialog";
 
-type Section = "servers" | "rules" | "logs" | "settings";
+type Section = "servers" | "logs" | "settings";
 
 interface Props {
   active: Section;
@@ -24,12 +24,6 @@ export const Sidebar: Component<Props> = (props) => {
             onClick={() => props.onSelect("servers")}
             icon={<Globe size={13} />}
             label={t("nav.servers")}
-          />
-          <NavItem
-            active={props.active === "rules"}
-            onClick={() => props.onSelect("rules")}
-            icon={<Filter size={13} />}
-            label={t("nav.routing")}
           />
           <NavItem
             active={props.active === "logs"}

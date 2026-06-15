@@ -21,6 +21,20 @@ const [options, setOptions] = createSignal<ConnectionOptions | null>(null);
 const [logs, setLogs] = createSignal<LogLine[]>([]);
 const [pings, setPings] = createSignal<Record<string, number | null>>({});
 const [probing, setProbing] = createSignal(false);
+
+/* What was the last connect call?
+ *
+ * Captured so the auto-reconnect daemon can replay it after a network
+ * drop without depending on UI state. Cleared whenever the user
+ * explicitly disconnects, so a manual disconnect never auto-retries.
+ *
+ * - `null`        — no intent, do not auto-retry
+ * - `{ profiles, selectedId }` — last successful connect call's args
+ */
+const [lastConnectArgs, setLastConnectArgs] = createSignal<
+  { profiles: ProxyProfile[]; selectedId: string } | null
+>(null);
+
 const MAX_LOGS = 500;
 
 export {
@@ -30,6 +44,7 @@ export {
   logs,
   pings,
   probing,
+  lastConnectArgs,
 };
 
 /** Hook the global event stream into our store. Idempotent. */
@@ -66,6 +81,9 @@ export async function connectAction(
   mode?: ConnectionMode
 ): Promise<void> {
   setActiveProfile(profile);
+  // Single-profile connect → store as a one-element subscription so the
+  // auto-reconnect daemon can replay it the same way.
+  setLastConnectArgs({ profiles: [profile], selectedId: profile.id });
   await api.connect(profile, mode);
 }
 
@@ -79,12 +97,29 @@ export async function connectSubscriptionAction(
 ): Promise<void> {
   const picked = profiles.find((p) => p.id === selectedId) ?? profiles[0];
   if (picked) setActiveProfile(picked);
+  setLastConnectArgs({ profiles, selectedId });
   await api.connectSubscription(profiles, selectedId, mode);
 }
 
 export async function disconnectAction(): Promise<void> {
+  // User-initiated disconnect → forget the last intent so the
+  // auto-reconnect daemon doesn't try to bring it back.
+  setLastConnectArgs(null);
   await api.disconnect();
   setActiveProfile(null);
+}
+
+/** Update the *selected* profile inside the persisted connect intent.
+ *
+ * Called after a successful clash-API hot-swap (`switch_server`), so the
+ * auto-reconnect daemon — should the tunnel later fail — restarts with
+ * the most recently chosen server, not the one the user originally
+ * connected to. The full subscription profile list is unchanged because
+ * a hot-swap never crosses subscriptions. */
+export function updateActiveServer(selectedId: string): void {
+  const cur = lastConnectArgs();
+  if (!cur) return;
+  setLastConnectArgs({ profiles: cur.profiles, selectedId });
 }
 
 export async function setMode(mode: ConnectionMode): Promise<void> {

@@ -146,6 +146,31 @@ pub async fn run_full_repair(supervisor: Arc<Supervisor>, tun_name: &str) -> Rep
         });
     }
 
+    // Step 3b — for *our* adapter specifically, run the thorough
+    // multi-strategy cleanup with a retry loop. This is the only path
+    // that uses wintun.dll's session API to forcibly release a
+    // half-dead adapter from a foreign process — exactly the
+    // post-suspend / post-crash failure mode that drove the rest of
+    // this repair flow into existence.
+    {
+        let t0 = std::time::Instant::now();
+        let outcome = crate::wintun_cleanup::cleanup_thorough_async(
+            tun_name,
+            crate::wintun_cleanup::CleanupBudget::RESUME,
+        )
+        .await;
+        steps.push(RepairStep {
+            id: "wintun_thorough".to_string(),
+            label_key: "repair.wintunThorough".to_string(),
+            ok: !matches!(
+                outcome,
+                crate::wintun_cleanup::CleanupOutcome::StillPresent
+            ),
+            detail: format!("{outcome:?}"),
+            took_ms: t0.elapsed().as_millis() as u64,
+        });
+    }
+
     // Step 4 — flush DNS resolver cache. Cheap, no admin needed.
     steps.push(run_blocking_step(
         "flush_dns",
@@ -216,10 +241,19 @@ fn run_blocking_step(
 }
 
 /// Run a Windows command-line tool with stdout/stderr captured. Returns
-/// the first 200 chars of stdout as a "what happened" hint on success,
+/// the first 240 chars of stdout as a "what happened" hint on success,
 /// or an io::Error on failure. We don't elevate — every command in our
 /// recovery path is fine without admin (`ipconfig`, `netsh interface ip`
 /// don't need it for their *flush* / *delete arpcache* sub-commands).
+///
+/// **Encoding note.** Windows CLI tools emit their output in the
+/// active console output codepage (CP866 on Russian Windows, CP437 on
+/// US English, CP852 on Polish, …). Treating those bytes as UTF-8
+/// turns every non-ASCII character into U+FFFD ("���"), which is what
+/// the Repair-Network UI used to render. We route every byte we read
+/// from these tools through [`crate::console_decode::decode_console_bytes`],
+/// which queries the active codepage at runtime and round-trips
+/// through UTF-16 → UTF-8.
 fn run_command_quiet(program: &str, args: &[&str]) -> Result<String, std::io::Error> {
     use std::process::Command;
 
@@ -239,15 +273,19 @@ fn run_command_quiet(program: &str, args: &[&str]) -> Result<String, std::io::Er
     if !out.status.success() {
         // Surface the tool's own stderr — it's almost always actionable
         // (e.g. "The system cannot find the file specified.").
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let stderr = crate::console_decode::decode_console_bytes(&out.stderr)
+            .trim()
+            .to_string();
+        let stdout = crate::console_decode::decode_console_bytes(&out.stdout)
+            .trim()
+            .to_string();
         let combined = if stderr.is_empty() { stdout } else { stderr };
         return Err(std::io::Error::other(format!(
             "{program} {args:?} exited with {}: {combined}",
             out.status
         )));
     }
-    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stdout = crate::console_decode::decode_console_bytes(&out.stdout);
     let trimmed = stdout.trim();
     Ok(trimmed.chars().take(240).collect())
 }

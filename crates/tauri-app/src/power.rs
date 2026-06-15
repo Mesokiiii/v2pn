@@ -84,11 +84,47 @@ fn on_resume(app: AppHandle) {
             return;
         };
 
-        // Hold for the network stack to settle. 3 s is the sweet spot
-        // we measured on the test laptop: less than 1 s and reqwest
-        // tends to grab a stale route, more than 5 s and the user
-        // notices the VPN-down window.
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        // For TUN mode the post-resume Wintun adapter is almost always
+        // wedged: sing-box was TerminateProcess'd before its atexit
+        // hooks could call WintunCloseAdapter, so the kernel SwDevice
+        // node is orphaned and a fresh start trips
+        // "create adapter: Cannot create a file when that file already
+        // exists. | open existing adapter: Element not found.".
+        //
+        // Run the thorough cleanup with the RESUME budget *before* we
+        // even begin the reconnect — wintun.dll's session API is the
+        // only thing that can release the SwDevice node from a foreign
+        // process. Then sleep a touch to let the IP stack settle.
+        if matches!(intent.mode, app_core::singbox::config::ConnectionMode::Tun) {
+            let tun_name = {
+                let state = app.state::<commands::AppState>();
+                let name = state.options.lock().await.tun_interface_name.clone();
+                name
+            };
+            let outcome = app_core::wintun_cleanup::cleanup_thorough_async(
+                &tun_name,
+                app_core::wintun_cleanup::CleanupBudget::RESUME,
+            )
+            .await;
+            tracing::info!(
+                target: "power",
+                ?outcome,
+                adapter = %tun_name,
+                "post-resume wintun cleanup"
+            );
+        }
+
+        // Hold for the network stack to settle. Proxy mode comes back
+        // fast (1.5–2 s); TUN mode needs longer because Wintun's
+        // SwDevice host can take a few seconds after our cleanup pass
+        // to fully retire the previous device node.
+        let settle = if matches!(intent.mode, app_core::singbox::config::ConnectionMode::Tun)
+        {
+            std::time::Duration::from_secs(5)
+        } else {
+            std::time::Duration::from_secs(3)
+        };
+        tokio::time::sleep(settle).await;
         tracing::info!(target: "power",
             profiles = intent.profiles.len(),
             selected = %intent.selected_id,

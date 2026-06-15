@@ -4,16 +4,17 @@ import { Sidebar } from "./components/Sidebar";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { SubscriptionCard } from "./components/SubscriptionCard";
 import { ServerRow } from "./components/ServerRow";
+import { ServerDetail } from "./components/ServerDetail";
 import { ImportDialog } from "./components/ImportDialog";
 import { EmptyState } from "./components/EmptyState";
 import { LogsView } from "./components/LogsView";
 import { SettingsView } from "./components/SettingsView";
 import { WebappFallback } from "./components/WebappFallback";
-import { Flag } from "./components/Flag";
 import { SubscriptionSkeleton } from "./components/SubscriptionSkeleton";
 import { ServerContextMenu, type ServerContextMenuTarget } from "./components/ServerContextMenu";
 import { AdminPrompt } from "./components/AdminPrompt";
 import { initElevation } from "./stores/elevation";
+import { attachAutoReconnect } from "./stores/autoreconnect";
 import { api, ProxyProfile } from "./lib/api";
 import {
   attachConnectionEvents,
@@ -24,6 +25,7 @@ import {
   isBusy,
   isConnected,
   probeAll,
+  updateActiveServer,
 } from "./stores/connection";
 import {
   activeSubscription,
@@ -33,13 +35,13 @@ import {
   updateSubscriptionData,
 } from "./stores/subscriptions";
 import { t } from "./lib/i18n";
-import { inferCountryCode, displayName } from "./lib/format";
 
-type Section = "servers" | "rules" | "logs" | "settings";
+type Section = "servers" | "logs" | "settings";
 
 const App: Component = () => {
   attachConnectionEvents();
   initElevation();
+  attachAutoReconnect();
 
   const [section, setSection] = createSignal<Section>("servers");
   const [selected, setSelected] = createSignal<ProxyProfile | null>(null);
@@ -182,6 +184,7 @@ const App: Component = () => {
         try {
           console.info("[v2pn] switch_server →", profile.id, profile.name);
           await api.switchServer(profile.id);
+          updateActiveServer(profile.id);
           console.info("[v2pn] switch_server ok");
           return;
         } catch (e) {
@@ -285,9 +288,6 @@ const App: Component = () => {
             </Show>
           </Show>
 
-          <Show when={section() === "rules"}>
-            <Placeholder title={t("nav.routing")} subtitle={t("comingSoon")} />
-          </Show>
           <Show when={section() === "logs"}>
             <LogsView />
           </Show>
@@ -297,7 +297,12 @@ const App: Component = () => {
         </main>
 
         <Show when={selected() && section() === "servers"}>
-          <DetailPanel profile={selected()!} />
+          <ServerDetail
+            profile={selected()!}
+            connection={connectionState()}
+            onConnect={(p) => void connectTo(p)}
+            onDisconnect={() => void disconnectAction()}
+          />
         </Show>
       </div>
 
@@ -348,75 +353,6 @@ const App: Component = () => {
     </div>
   );
 };
-
-const Placeholder: Component<{ title: string; subtitle?: string }> = (props) => (
-  <div class="flex flex-1 items-center justify-center">
-    <div class="text-center">
-      <div class="text-[14px] text-[var(--color-fg-0)]">{props.title}</div>
-      <Show when={props.subtitle}>
-        {(s) => <div class="mt-1 text-[12px] text-[var(--color-fg-2)]">{s()}</div>}
-      </Show>
-    </div>
-  </div>
-);
-
-const DetailPanel: Component<{ profile: ProxyProfile }> = (props) => {
-  const cc = () => inferCountryCode(props.profile.name, props.profile.country_code);
-  const name = () => displayName(props.profile.name) || `${props.profile.server}:${props.profile.port}`;
-
-  return (
-    <aside class="anim-side-enter flex w-[320px] shrink-0 flex-col border-l border-[var(--color-line)]">
-      <header class="border-b border-[var(--color-line)] px-5 py-3">
-        <div class="text-[12px] text-[var(--color-fg-2)]">{t("servers.selected")}</div>
-        <div class="mt-1 flex items-center gap-2">
-          <Flag code={cc()} size={18} />
-          <div class="min-w-0 truncate text-[14px] font-medium">{name()}</div>
-        </div>
-      </header>
-
-      <dl class="grid grid-cols-[88px_1fr] gap-y-2 px-5 py-4 text-[12px]">
-        <Field label={t("detail.protocol")}>
-          <span class="font-mono text-[11.5px] uppercase">{props.profile.protocol}</span>
-        </Field>
-        <Field label={t("detail.server")}>
-          <span class="font-mono text-[11.5px]">{props.profile.server}</span>
-        </Field>
-        <Field label={t("detail.port")}>
-          <span class="font-mono text-[11.5px] tabular-nums">{props.profile.port}</span>
-        </Field>
-        <Field label={t("detail.transport")}>
-          <span class="font-mono text-[11.5px] uppercase">{props.profile.transport.type}</span>
-        </Field>
-        <Field label={t("detail.security")}>
-          <span class="font-mono text-[11.5px] uppercase">
-            {props.profile.tls.reality
-              ? "REALITY"
-              : props.profile.tls.enabled
-              ? "TLS"
-              : "PLAIN"}
-          </span>
-        </Field>
-        <Show when={props.profile.tls.server_name}>
-          <Field label={t("detail.sni")}>
-            <span class="truncate font-mono text-[11.5px]">{props.profile.tls.server_name}</span>
-          </Field>
-        </Show>
-        <Show when={props.profile.tls.utls_fingerprint}>
-          <Field label={t("detail.utls")}>
-            <span class="font-mono text-[11.5px]">{props.profile.tls.utls_fingerprint}</span>
-          </Field>
-        </Show>
-      </dl>
-    </aside>
-  );
-};
-
-const Field: Component<{ label: string; children: any }> = (p) => (
-  <>
-    <dt class="text-[var(--color-fg-2)]">{p.label}</dt>
-    <dd class="min-w-0 text-[var(--color-fg-0)]">{p.children}</dd>
-  </>
-);
 
 function asError(e: unknown): string {
   if (typeof e === "string") return e;

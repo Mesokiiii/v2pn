@@ -63,5 +63,6 @@ pub use net::{clash_api, network_repair, outbound_health, probe, wintun_cleanup}
 
 // system/
 pub use system::{elevation, hwid, power, state_guard, sys_proxy};
+pub use system::console_decode;
 
 pub use error::{CoreError, CoreResult};

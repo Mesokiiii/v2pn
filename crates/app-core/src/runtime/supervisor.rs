@@ -670,6 +670,22 @@ impl Supervisor {
 /// for the user to handle manually.
 const AUTO_RESTART_BACKOFF_SECONDS: &[u64] = &[1, 2, 5, 15, 30, 60, 120];
 
+/// Walk the config JSON and return the TUN inbound's interface name, if
+/// any. Used by the auto-restart loop to know which adapter to clean
+/// up before the next attempt without taking another dependency on the
+/// `ConnectionOptions` struct.
+fn extract_tun_interface_name(cfg: &serde_json::Value) -> Option<String> {
+    let inbounds = cfg.get("inbounds")?.as_array()?;
+    for ib in inbounds {
+        if ib.get("type").and_then(|t| t.as_str()) == Some("tun") {
+            if let Some(name) = ib.get("interface_name").and_then(|n| n.as_str()) {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Spawn a Tokio task that re-runs `start()` with the last known config
 /// using the schedule above. Idempotent via
 /// `inner.auto_restart_in_flight`: a second concurrent call is a no-op.
@@ -724,6 +740,29 @@ fn spawn_auto_restart_loop(inner: Arc<SupervisorInner>, reason: &'static str) {
                     break;
                 }
             };
+
+            // Pre-clean Wintun before every TUN-mode start attempt. The
+            // child has been gone for at least `*secs` seconds at this
+            // point so the SwDevice host has had time to settle, but we
+            // still want the wintun-DLL session-close to forcibly drop
+            // any leftover handle just in case.
+            if matches!(ctx.mode, ConnectionMode::Tun) {
+                if let Some(adapter) = extract_tun_interface_name(&ctx.config) {
+                    let outcome =
+                        crate::wintun_cleanup::cleanup_thorough_async(
+                            &adapter,
+                            crate::wintun_cleanup::CleanupBudget::AUTO_RESTART,
+                        )
+                        .await;
+                    tracing::info!(
+                        target: "supervisor",
+                        attempt = attempt + 1,
+                        ?outcome,
+                        %adapter,
+                        "pre-restart wintun cleanup"
+                    );
+                }
+            }
 
             match supervisor.start(&ctx.config, ctx.mode).await {
                 Ok(()) => {

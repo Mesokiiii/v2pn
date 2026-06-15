@@ -1,4 +1,4 @@
-import { Component, For, Show, createSignal } from "solid-js";
+import { Component, For, Show, createMemo, createSignal } from "solid-js";
 import {
   FolderOpen,
   ClipboardCopy,
@@ -11,8 +11,14 @@ import {
   Loader2,
   Info,
   Split,
+  RefreshCw,
 } from "lucide-solid";
 import { connectionOptions, setMode } from "~/stores/connection";
+import {
+  autoReconnectEnabled,
+  autoReconnectStatus,
+  setAutoReconnect,
+} from "~/stores/autoreconnect";
 import type { ConnectionMode, RepairReport } from "~/lib/api";
 import { api } from "~/lib/api";
 import { t } from "~/lib/i18n";
@@ -52,6 +58,15 @@ export const SettingsView: Component = () => {
             subtitle={t("settings.modeTunHint")}
             active={opts()?.mode === "tun"}
           />
+        </Section>
+
+        {/* Auto-reconnect */}
+        <Section
+          icon={<RefreshCw size={14} />}
+          title={t("settings.sectionAutoReconnect")}
+          hint={t("settings.sectionAutoReconnectHint")}
+        >
+          <AutoReconnectCard />
         </Section>
 
         {/* Routing — split tunnel / per-country bypass / custom rules */}
@@ -143,6 +158,123 @@ export const SettingsView: Component = () => {
     </div>
   );
 };
+
+/* ──────────────────────────────────────────────────────────────────── */
+/*  Auto-reconnect card                                                 */
+/* ──────────────────────────────────────────────────────────────────── */
+
+const AutoReconnectCard: Component = () => {
+  /* Re-evaluates every second so the "Attempt #N in 12s" countdown
+   * actually counts down. Cheap; only one timer for the whole card. */
+  const [now, setNow] = createSignal(Date.now());
+  let tick: number | null = null;
+  const start = () => {
+    if (tick != null) return;
+    tick = window.setInterval(() => setNow(Date.now()), 1000);
+  };
+  const stop = () => {
+    if (tick != null) {
+      clearInterval(tick);
+      tick = null;
+    }
+  };
+  /* Only run the ticker when there's something to count down. */
+  createMemo(() => {
+    const s = autoReconnectStatus();
+    if (s.kind === "scheduled") start();
+    else stop();
+    return null;
+  });
+
+  const statusLine = () => {
+    const s = autoReconnectStatus();
+    switch (s.kind) {
+      case "idle":
+        return autoReconnectEnabled() ? t("settings.autoReconnectStatusIdle") : "";
+      case "waiting-network":
+        return t("settings.autoReconnectStatusWaitingNetwork");
+      case "scheduled": {
+        const sec = Math.max(0, Math.ceil((s.nextAtMs - now()) / 1000));
+        return t("settings.autoReconnectStatusScheduled", { n: s.attempt, sec });
+      }
+      case "in-flight":
+        return t("settings.autoReconnectStatusInFlight", { n: s.attempt });
+    }
+  };
+
+  const statusTone = () => {
+    const s = autoReconnectStatus();
+    if (!autoReconnectEnabled()) return "muted";
+    if (s.kind === "in-flight") return "active";
+    if (s.kind === "scheduled" || s.kind === "waiting-network") return "warn";
+    return "muted";
+  };
+
+  return (
+    <div class="hairline rounded-lg bg-[var(--color-bg-1)] p-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="text-[12.5px] font-medium leading-tight text-[var(--color-fg-0)]">
+            {t("settings.autoReconnectLabel")}
+          </div>
+          <p class="mt-1.5 text-[11.5px] leading-[1.55] text-[var(--color-fg-2)]">
+            {t("settings.autoReconnectDesc")}
+          </p>
+        </div>
+        <Switch
+          on={autoReconnectEnabled()}
+          onChange={(v) => setAutoReconnect(v)}
+        />
+      </div>
+
+      <Show when={autoReconnectEnabled() && statusLine()}>
+        <div class="mt-3 flex items-center gap-2 border-t border-[var(--color-line)] pt-3 text-[11.5px]">
+          <span
+            class="dot shrink-0"
+            data-state={
+              statusTone() === "active"
+                ? "connecting"
+                : statusTone() === "warn"
+                ? "connecting"
+                : "idle"
+            }
+          />
+          <span
+            classList={{
+              "text-[var(--color-fg-1)]":
+                statusTone() === "active" || statusTone() === "warn",
+              "text-[var(--color-fg-2)]": statusTone() === "muted",
+            }}
+          >
+            {statusLine()}
+          </span>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+/* A small, reusable on/off toggle. Pure CSS animation; no library. */
+const Switch: Component<{ on: boolean; onChange: (v: boolean) => void }> = (p) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={p.on}
+    onClick={() => p.onChange(!p.on)}
+    class="tactile relative h-[22px] w-[40px] shrink-0 rounded-full border transition-colors duration-200"
+    classList={{
+      "border-[color-mix(in_srgb,var(--color-accent)_55%,transparent)] bg-[color-mix(in_srgb,var(--color-accent)_85%,transparent)]":
+        p.on,
+      "border-[var(--color-line-strong)] bg-[var(--color-bg-2)]": !p.on,
+    }}
+  >
+    <span
+      aria-hidden="true"
+      class="absolute top-[2px] left-[2px] h-[16px] w-[16px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform duration-[220ms]"
+      style={{ transform: p.on ? "translateX(18px)" : "translateX(0)" }}
+    />
+  </button>
+);
 
 /* ──────────────────────────────────────────────────────────────────── */
 /*  Repair card                                                         */

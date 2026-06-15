@@ -78,6 +78,26 @@ export const en: Locale = {
     usageTip: "Subscription traffic",
     usageTipBody:
       "How much of your subscription quota you've used. The bar turns yellow at 85% and red at 100%. The cap and expiry are set by your provider.",
+
+    localTrafficLabel: "Local traffic",
+    modeLabel: "Mode",
+    autoReconnectLabel: "Auto-reconnect",
+    autoReconnectOff: "Off",
+    autoReconnectOn: "On",
+    autoReconnectOffTip: "Auto-reconnect is off",
+    autoReconnectOffTipBody:
+      "If the tunnel drops — Wi-Fi blip, sleep, network glitch — v2pn does nothing; you stay disconnected until you click Connect. Pick this when you want to start every session by hand.",
+    autoReconnectOnTip: "Auto-reconnect is on",
+    autoReconnectOnTipBody:
+      "If the tunnel fails or the OS goes offline, v2pn waits for the network to return and restarts sing-box at the same server. Backoff 2s → 5s → 10s → 20s → 1m → 2m, with an instant attempt the moment the OS reports network back. A manual Disconnect always trumps auto-reconnect.",
+    localTrafficTunnel: "Tunnel",
+    localTrafficDirect: "Direct",
+    localTrafficTunnelTip: "Tunnel — all traffic via VPN",
+    localTrafficTunnelTipBody:
+      "Including banks, government services and sites in your country. Maximum anonymisation, but local services see a foreign IP — bank anti-fraud may freeze a transaction, regional streaming refuses to play, government portals ask you to re-verify your login.",
+    localTrafficDirectTip: "Direct — local traffic bypasses the VPN",
+    localTrafficDirectTipBody:
+      "Domains and IPs of your country (SagerNet dataset, auto-updated) go through your regular internet — banks and government work at full local speed with no anti-fraud blocks. Everything else still goes through the VPN. Country list and custom rules live in Settings → Routing.",
   },
 
   servers: {
@@ -96,6 +116,9 @@ export const en: Locale = {
     security: "Security",
     sni: "SNI",
     utls: "uTLS",
+    latency: "Latency",
+    switch: "Switch to this server",
+    activeBadge: "Active",
   },
 
   importDialog: {
@@ -154,6 +177,17 @@ export const en: Locale = {
     modeTun: "TUN (full system)",
     modeTunHint:
       "Layer-3 virtual adapter via Wintun. Captures every packet from every app. Requires admin privileges.",
+
+    sectionAutoReconnect: "Auto-reconnect",
+    sectionAutoReconnectHint:
+      "If the tunnel drops — Wi-Fi reconnects, network glitches, sleep wake-up — v2pn brings it back automatically.",
+    autoReconnectLabel: "Reconnect automatically",
+    autoReconnectDesc:
+      "On: when the tunnel fails or the OS goes offline, v2pn waits for the network to return and restarts sing-box at the same server. Backoff 2s → 5s → 10s → 20s → 1m → 2m, with an instant attempt the moment the OS reports network back. Clicking Disconnect turns auto-reconnect off until the next successful connect.",
+    autoReconnectStatusIdle: "Active — waiting on events",
+    autoReconnectStatusWaitingNetwork: "Waiting for network",
+    autoReconnectStatusScheduled: "Attempt #{n} in {sec}s",
+    autoReconnectStatusInFlight: "Reconnecting (attempt #{n})…",
 
     sectionRouting: "Routing",
     sectionRoutingHint:
